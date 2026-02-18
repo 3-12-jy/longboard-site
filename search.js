@@ -1,4 +1,4 @@
-// search.js - 全局搜索功能（使用JavaScript驱动跳转，避免href属性问题）
+// search.js - 全局搜索功能（支持在搜索结果页连续搜索）
 
 // 网站页面索引数据
 const sitePages = [
@@ -51,7 +51,7 @@ function performSearch(query) {
 function onResultClick(e) {
     const target = e.target.closest('.search-result-link');
     if (!target) return;
-    e.preventDefault(); // 阻止默认（如果有href）
+    e.preventDefault();
     const url = target.dataset.url;
     if (url) {
         console.log('搜索结果点击，跳转至:', url);
@@ -75,43 +75,51 @@ function displayResults(results, query) {
         return;
     }
 
-    // 获取当前目录，用于构建绝对链接
     const basePath = getBasePath();
 
     let html = `<h2>找到 ${results.length} 个与“${query}”相关的结果：</h2><ul>`;
     results.forEach(page => {
-        // 生成绝对链接
         const fullUrl = basePath + page.url;
-        // 不使用 href 属性，改用 data-url 和点击事件
         html += `<li><span class="search-result-link" data-url="${fullUrl}">${page.title}</span><br><small>${page.description}</small></li>`;
     });
     html += '</ul>';
     container.innerHTML = html;
 
-    // 为所有搜索结果链接添加点击事件监听（事件委托）
     container.addEventListener('click', onResultClick);
-
     console.log('搜索结果已渲染，链接指向:', results.map(p => basePath + p.url));
 }
 
 /**
- * 初始化搜索按钮（用于所有非搜索结果页）
+ * 初始化搜索按钮（所有页面通用）
  */
 function initSearchButton() {
     const btn = document.getElementById('searchBtn');
     const input = document.getElementById('searchInput');
     if (btn && input) {
-        btn.addEventListener('click', function() {
+        // 移除原有事件避免重复绑定
+        btn.removeEventListener('click', window._searchBtnHandler);
+        input.removeEventListener('keypress', window._searchInputHandler);
+
+        // 定义处理函数
+        const handler = function() {
             const q = input.value.trim();
             if (!q) {
                 alert('请输入搜索关键词');
                 return;
             }
+            // 跳转到搜索页，携带查询参数
             window.location.href = `search.html?q=${encodeURIComponent(q)}`;
-        });
-        input.addEventListener('keypress', function(e) {
+        };
+        const keyHandler = function(e) {
             if (e.key === 'Enter') btn.click();
-        });
+        };
+
+        // 保存以便移除
+        window._searchBtnHandler = handler;
+        window._searchInputHandler = keyHandler;
+
+        btn.addEventListener('click', handler);
+        input.addEventListener('keypress', keyHandler);
     }
 }
 
@@ -120,6 +128,11 @@ function initSearchButton() {
  */
 function initSearchPage() {
     const q = getQueryParam('q');
+    // 将当前查询词填入搜索框
+    const input = document.getElementById('searchInput');
+    if (input && q) {
+        input.value = q;
+    }
     if (q) {
         const results = performSearch(q);
         displayResults(results, q);
@@ -128,9 +141,13 @@ function initSearchPage() {
     }
 }
 
-// 根据当前页面执行不同初始化
-if (window.location.pathname.endsWith('search.html') || window.location.pathname.endsWith('search')) {
-    document.addEventListener('DOMContentLoaded', initSearchPage);
-} else {
-    document.addEventListener('DOMContentLoaded', initSearchButton);
-}
+// 页面加载完成后执行
+document.addEventListener('DOMContentLoaded', function() {
+    // 所有页面都初始化搜索按钮（确保搜索框可用）
+    initSearchButton();
+
+    // 如果是搜索结果页，额外初始化结果显示
+    if (window.location.pathname.endsWith('search.html') || window.location.pathname.endsWith('search')) {
+        initSearchPage();
+    }
+});
